@@ -83,21 +83,23 @@ classdef fitnessSensors < handle
         end
         
         function geoPlotLine(obj, UIAxes)
-            obj.Axes = UIAxes;
+            % Create a UI figure
+            uif = uifigure('Name','Running Map');
+
+            % Create 2D interactive geoaxes
+            ax = geoaxes(uif, 'Basemap', 'streets');  % or 'satellite', 'topographic', etc.
 
             if isempty(obj.LatHistory)
                 error("No location data. Start logging first.");
             end
 
-            geobasemap(obj.Axes, "streets");
-
-            % set starting view
-            geolimits(obj.Axes, ...
-                [obj.LatHistory(end)-0.005, obj.LatHistory(end)+0.005], ...
-                [obj.LonHistory(end)-0.005, obj.LonHistory(end)+0.005]);
-
             % plot the initial track
             obj.SavePlot = geoplot(obj.Axes, obj.LatHistory, obj.LonHistory, 'r-', 'LineWidth', 2);
+
+            % set starting view
+            geolimits(ax, ...
+                [obj.LatHistory(end)-0.005, obj.LatHistory(end)+0.005], ...
+                [obj.LonHistory(end)-0.005, obj.LonHistory(end)+0.005]);
 
             % timer fires every 1 second
             obj.T = timer( ...
