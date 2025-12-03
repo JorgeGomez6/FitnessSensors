@@ -81,19 +81,12 @@ classdef fitnessSensors < handle
             
 
         end
-        function plotTargetSignal(obj, axes, titleStr)
+        function geoPlotLine(obj, axes)
             
             if isempty(obj.TargetSignal)
                 error('No target to plot')
             else
-                newTitleStr = string(titleStr);
-                titleStrPretty = 'Acceleration signal: ' + newTitleStr;
-
-                % fix so that every time you integrate it changes the name
-                % of the obj.targetSignalName
-                
-                obj.targetSignalName = newTitleStr;
-                plot(axes, obj.TargetSignalTs, obj.TargetSignal);
+                geoplot(axes, obj.TargetSignalTs, obj.TargetSignal);
                 ylabel(axes, titleStrPretty);
                 xlabel(axes, 'time(s)');
                 title(axes, titleStrPretty);
