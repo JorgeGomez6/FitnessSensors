@@ -16,6 +16,9 @@ classdef fitnessSensors < handle
         SavePlot;
 
         T;
+
+        IsWorkoutActive logical = false;
+        IsPaused logical = false;
         
     end
     properties(Access=private)
@@ -94,12 +97,62 @@ classdef fitnessSensors < handle
                 "TimerFcn", @obj.timerUpdate);
             end
         end
+
+        %start/pause/stop logic
+        
         function start(obj)
-            start(obj.T);
+        if obj.IsWorkoutActive && ~obj.IsPaused
+        fprintf("Workout is already running.\n");
+        return;
+        end
+
+        obj.mobileDevConnection.Logging = 1;
+
+        obj.IsWorkoutActive = true;
+        obj.IsPaused = false;
+
+        if ~isempty(obj.T) && isvalid(obj.T)
+        start(obj.T);
+        end
+
+        fprintf("Workout has begun.\n");
+        end
+
+        function pause(obj)
+        if ~obj.IsWorkoutActive
+        fprintf("Workout must be active to pause.\n");
+        return;
+        end
+
+        obj.mobileDevConnection.Logging = 0;
+        if ~isempty(obj.T) && isvalid(obj.T)
+        stop(obj.T);
+        end
+
+        obj.IsPaused = true;
+        fprintf("Workout paused.\n");
         end
 
         function stop(obj)
-            stop(obj.T);
+        if ~obj.IsWorkoutActive
+        fprintf("Workout must be active to stop.\n");
+        return;
+        end
+
+        obj.mobileDevConnection.Logging = 0;
+        if ~isempty(obj.T) && isvalid(obj.T)
+        stop(obj.T);
+        end
+
+        obj.IsWorkoutActive = false;
+        obj.IsPaused = false;
+        fprintf("Workout stopped.\n");
+        end
+
+        %timer callback
+        function timerUpdate(obj)
+        if ~obj.IsWorkoutActive || obj.IsPaused
+        return;
         end
         
         function getMaxValues
