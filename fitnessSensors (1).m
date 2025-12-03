@@ -27,19 +27,13 @@ classdef fitnessSensors < handle
             end
         end
 
-        function logSensorData(obj, timeAmount, timeUnits, delaySeconds)
+        function logSensorData(obj, timeAmount, timeUnits, timeSeconds)
 
             timeUnits = string(timeUnits);
 
             if timeAmount > 0
                 fprintf("Starting workout for %d %s...\n", timeAmount, timeUnits);
             end
-
-            for ii = delaySeconds:-1:1
-                fprintf("%d \n", ii)
-                pause(1);
-            end
-
 
             fprintf('\n Start \n')
 
@@ -51,8 +45,7 @@ classdef fitnessSensors < handle
             end
 
             obj.mobileDevConnection.Logging = 1;
-            pause(5)
-                %timeSeconds);
+            pause(timeSeconds);
             obj.mobileDevConnection.Logging = 0;
 
             fprintf('\n Done \n')
