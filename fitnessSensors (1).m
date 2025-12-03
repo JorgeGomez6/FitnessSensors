@@ -1,8 +1,8 @@
 classdef fitnessSensors < handle
+
     properties
         AccelerationSignal; % Acceleration signal
         VelocitySignal; % Velocity Signal
-        PositionSignal; % Latitude/Longitude Signal
         TargetSignal; % Target Signal
         TargetSignalTs; % Time stamp Signal
         TimeHistory;
@@ -15,17 +15,22 @@ classdef fitnessSensors < handle
         Axes;
         SavePlot;
 
+        LatHistory double = [];   % Stores all latitude samples
+        LonHistory double = [];   % Stores all longitude samples
+
         T;
 
         IsWorkoutActive logical = false;
         IsPaused logical = false;
         
     end
+    
     properties(Access=private)
         mobileDevConnection;
     end
     
     methods
+    
         function obj = fitnessSensors()
 
             % Log the mobile device connection
@@ -62,9 +67,10 @@ classdef fitnessSensors < handle
             
             [A, t] = accellog(obj.mobileDevConnection);
             [V, ts] = angvellog(obj.mobileDevConnection);
-            [lat, lon, timestamp, speed, course, alt, horizacc] = poslog(obj.mobileDevConnection);
+            [obj.Latitude, obj.Longitude, timestamp, obj.Speed, obj.Course, obj.Altitude, obj.HorizontalAccuracy] = poslog(obj.mobileDevConnection);
             
-
+            obj.LatHistory = obj.Latitude;
+            obj.LonHistory = obj.Longitude;
 
             if isempty(A) || isempty(V) || isempty(lat) || isempty(t) || size(A,1) == 0
                 error('No sensor data found. Collect data first.');
@@ -74,29 +80,31 @@ classdef fitnessSensors < handle
             obj.TimeHistory = datetime("now");
             obj.AccelerationSignal = A; 
             obj.VelocitySignal = V; 
-            obj.Latitude = lat
-            obj.Longitude = lon
-            obj.Speed = speed
-            obj.Course = course
-            obj.Altitude = alt
-            obj.HorizontalAccuracy = horizacc
         end
+        
         function geoPlotLine(obj, UIAxes)
-            obj.Axes = UIAxes
-            lat = obj.positionSignal(:,1);
-            lon = obj.positionSignal(:,2);
-            
-            if isempty(obj.TargetSignal)
-                error('No target to plot');
-            else
-                geobasemap(obj.Axes, 'streets');
-                geolimits(obj.Axes, [lat-0.005 lat+0.005], [lon-0.005 lon+0.005]);
-                obj.SavePlot = geoplot(obj.Axes, lat, lon, 'r-', LineWidth=2);
-                
-                obj.T = timer("ExecutionMode", "fixedSpacing", "Period",1, ...
-                "TimerFcn", @obj.timerUpdate);
+            obj.Axes = UIAxes;
+
+            if isempty(obj.LatHistory)
+                error("No location data. Start logging first.");
             end
-        end
+
+            geobasemap(obj.Axes, "streets");
+
+            % set starting view
+            geolimits(obj.Axes, ...
+                [obj.LatHistory(end)-0.005, obj.LatHistory(end)+0.005], ...
+                [obj.LonHistory(end)-0.005, obj.LonHistory(end)+0.005]);
+
+            % plot the initial track
+            obj.SavePlot = geoplot(obj.Axes, obj.LatHistory, obj.LonHistory, 'r-', 'LineWidth', 2);
+
+            % timer fires every 1 second
+            obj.T = timer( ...
+                "ExecutionMode", "fixedSpacing", ...
+                "Period", 1, ...
+                "TimerFcn", @(~,~) obj.timerUpdate() );
+        end    
 
         %start/pause/stop logic
         
@@ -152,10 +160,36 @@ classdef fitnessSensors < handle
         %timer callback
         function timerUpdate(obj)
             if ~obj.IsWorkoutActive || obj.IsPaused
-            return;
+                return;
+            [lat, lon] = poslog(obj.mobileDevConnection);
+
+            if isempty(lat)
+                return;
+            end
+
+            % append to route
+            obj.LatHistory(end+1) = lat(end);
+            obj.LonHistory(end+1) = lon(end);
+
+            % update the line data
+            obj.SavePlot.LatitudeData = obj.LatHistory;
+            obj.SavePlot.LongitudeData = obj.LonHistory;
+
+            % auto-recenter with ~10% margin
+            latMin = min(obj.LatHistory);
+            latMax = max(obj.LatHistory);
+            lonMin = min(obj.LonHistory);
+            lonMax = max(obj.LonHistory);
+
+            dLat = (latMax - latMin) * 0.1;
+            dLon = (lonMax - lonMin) * 0.1;
+
+            geolimits(obj.Axes, [latMin-dLat, latMax+dLat], [lonMin-dLon, lonMax+dLon]);
         end
         
         function getMaxValues
+            max(abs(obj.AccelerationSignal))
+            max(abs(obj.VelocitySignal))
         end
             
         function saveWorkoutFiles(obj)
