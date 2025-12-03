@@ -76,24 +76,25 @@ classdef fitnessSensors < handle
             obj.VelocitySignal = V; 
             obj.PositionSignal = [lat, lon, timestamp, speed, course, alt, horizacc ];
 
-            geoplot(lat,lon,"r-")
-            geobasemap streets
-            
-
         end
         function geoPlotLine(obj, axes)
+        
+            lat = obj.positionSignal(:,1);
+            lon = obj.positionSignal(:,2);
             
             if isempty(obj.TargetSignal)
-                error('No target to plot')
+                error('No target to plot');
             else
-                geoplot(axes, obj.TargetSignalTs, obj.TargetSignal);
-                ylabel(axes, titleStrPretty);
-                xlabel(axes, 'time(s)');
-                title(axes, titleStrPretty);
+                geobasemap(axes, 'streets');
+                geolimits(axes, [lat-0.005 lat+0.005], [lon-0.005 lon+0.005]);
+                geoplot(axes, lat, lon, 'r-', LineWidth=2);
             end
         end
-        function saveWorkoutFiles(obj, )
-            saveas(fig,filename, 'png')
-            
+        function saveWorkoutFiles(obj)
+            i = 1;
+            filename = 'workout' + string(i);
+            saveas(fig,filename, 'png');
+            i = i + 1;
+        end
     end
 end
