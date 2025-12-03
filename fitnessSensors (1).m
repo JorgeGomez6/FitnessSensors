@@ -5,6 +5,18 @@ classdef fitnessSensors < handle
         PositionSignal; % Latitude/Longitude Signal
         TargetSignal; % Target Signal
         TargetSignalTs; % Time stamp Signal
+        TimeHistory;
+        Latitude;
+        Longitude;
+        Speed;
+        Course;
+        Altitude;
+        HorizontalAccuracy;
+        Axes;
+        SavePlot;
+
+        T;
+        
     end
     properties(Access=private)
         mobileDevConnection;
@@ -65,28 +77,46 @@ classdef fitnessSensors < handle
             end
 
             obj.TargetSignalTs = t;
+            obj.TimeHistory = datetime("now");
             obj.AccelerationSignal = A; 
             obj.VelocitySignal = V; 
-            obj.PositionSignal = [lat, lon, timestamp, speed, course, alt, horizacc ];
-
+            obj.Latitude = lat
+            obj.Longitude = lon
+            obj.Speed = speed
+            obj.Course = course
+            obj.Altitude = alt
+            obj.HorizontalAccuracy = horizacc
         end
-        function geoPlotLine(obj, axes)
-        
+        function geoPlotLine(obj, UIAxes)
+            obj.Axes = UIAxes
             lat = obj.positionSignal(:,1);
             lon = obj.positionSignal(:,2);
             
             if isempty(obj.TargetSignal)
                 error('No target to plot');
             else
-                geobasemap(axes, 'streets');
-                geolimits(axes, [lat-0.005 lat+0.005], [lon-0.005 lon+0.005]);
-                geoplot(axes, lat, lon, 'r-', LineWidth=2);
+                geobasemap(obj.Axes, 'streets');
+                geolimits(obj.Axes, [lat-0.005 lat+0.005], [lon-0.005 lon+0.005]);
+                obj.SavePlot = geoplot(obj.Axes, lat, lon, 'r-', LineWidth=2);
+                
+                obj.T = timer("ExecutionMode", "fixedSpacing", "Period",1, ...
+                "TimerFcn", @obj.timerUpdate);
             end
         end
+        function start(obj)
+            start(obj.T);
+        end
+
+        function stop(obj)
+            stop(obj.T);
+        end
+        
+        function getMaxValues
+            
         function saveWorkoutFiles(obj)
             i = 1;
-            filename = 'workout' + string(i);
-            saveas(fig,filename, 'png');
+            filename = 'Workout ' + string(i);
+            saveas(obj.SavePlot,filename, 'png');
             i = i + 1;
         end
     end
