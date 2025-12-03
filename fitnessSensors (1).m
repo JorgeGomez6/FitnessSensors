@@ -72,7 +72,7 @@ classdef fitnessSensors < handle
             obj.LatHistory = obj.Latitude;
             obj.LonHistory = obj.Longitude;
 
-            if isempty(A) || isempty(V) || isempty(lat) || isempty(t) || size(A,1) == 0
+            if isempty(A) || isempty(V) || isempty(obj.Latitude) || isempty(t) || size(A,1) == 0
                 error('No sensor data found. Collect data first.');
             end
 
@@ -83,25 +83,21 @@ classdef fitnessSensors < handle
         end
         
         function geoPlotLine(obj, UIAxes)
-            % Create a UI figure
             uif = uifigure('Name','Running Map');
+            ax = geoaxes(uif, 'Basemap', 'streets');
 
-            % Create 2D interactive geoaxes
-            ax = geoaxes(uif, 'Basemap', 'streets');  % or 'satellite', 'topographic', etc.
+            obj.Axes = ax;
 
             if isempty(obj.LatHistory)
                 error("No location data. Start logging first.");
             end
 
-            % plot the initial track
             obj.SavePlot = geoplot(obj.Axes, obj.LatHistory, obj.LonHistory, 'r-', 'LineWidth', 2);
 
-            % set starting view
             geolimits(ax, ...
                 [obj.LatHistory(end)-0.005, obj.LatHistory(end)+0.005], ...
                 [obj.LonHistory(end)-0.005, obj.LonHistory(end)+0.005]);
 
-            % timer fires every 1 second
             obj.T = timer( ...
                 "ExecutionMode", "fixedSpacing", ...
                 "Period", 1, ...
@@ -113,11 +109,10 @@ classdef fitnessSensors < handle
         function start(obj)
             if obj.IsWorkoutActive && ~obj.IsPaused
                 fprintf("Workout is already running.\n");
-            return;
+                return;
             end
 
             obj.mobileDevConnection.Logging = 1;
-
             obj.IsWorkoutActive = true;
             obj.IsPaused = false;
 
@@ -131,7 +126,7 @@ classdef fitnessSensors < handle
         function pause(obj)
             if ~obj.IsWorkoutActive
                 fprintf("Workout must be active to pause.\n");
-            return;
+                return;
             end
 
             obj.mobileDevConnection.Logging = 0;
@@ -146,7 +141,7 @@ classdef fitnessSensors < handle
         function stop(obj)
             if ~obj.IsWorkoutActive
                 fprintf("Workout must be active to stop.\n");
-            return;
+                return;
             end
 
             obj.mobileDevConnection.Logging = 0;
@@ -163,21 +158,20 @@ classdef fitnessSensors < handle
         function timerUpdate(obj)
             if ~obj.IsWorkoutActive || obj.IsPaused
                 return;
+            end
+
             [lat, lon] = poslog(obj.mobileDevConnection);
 
             if isempty(lat)
                 return;
             end
 
-            % append to route
             obj.LatHistory(end+1) = lat(end);
             obj.LonHistory(end+1) = lon(end);
 
-            % update the line data
             obj.SavePlot.LatitudeData = obj.LatHistory;
             obj.SavePlot.LongitudeData = obj.LonHistory;
 
-            % auto-recenter with ~10% margin
             latMin = min(obj.LatHistory);
             latMax = max(obj.LatHistory);
             lonMin = min(obj.LonHistory);
@@ -189,7 +183,7 @@ classdef fitnessSensors < handle
             geolimits(obj.Axes, [latMin-dLat, latMax+dLat], [lonMin-dLon, lonMax+dLon]);
         end
         
-        function getMaxValues
+        function getMaxValues(obj)
             max(abs(obj.AccelerationSignal))
             max(abs(obj.VelocitySignal))
         end
@@ -201,4 +195,5 @@ classdef fitnessSensors < handle
             i = i + 1;
         end
     end
+end
 end
