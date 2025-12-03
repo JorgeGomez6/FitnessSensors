@@ -101,61 +101,62 @@ classdef fitnessSensors < handle
         %start/pause/stop logic
         
         function start(obj)
-        if obj.IsWorkoutActive && ~obj.IsPaused
-        fprintf("Workout is already running.\n");
-        return;
-        end
+            if obj.IsWorkoutActive && ~obj.IsPaused
+                fprintf("Workout is already running.\n");
+            return;
+            end
 
-        obj.mobileDevConnection.Logging = 1;
+            obj.mobileDevConnection.Logging = 1;
 
-        obj.IsWorkoutActive = true;
-        obj.IsPaused = false;
+            obj.IsWorkoutActive = true;
+            obj.IsPaused = false;
 
-        if ~isempty(obj.T) && isvalid(obj.T)
-        start(obj.T);
-        end
+            if ~isempty(obj.T) && isvalid(obj.T)
+                start(obj.T);
+            end
 
-        fprintf("Workout has begun.\n");
+            fprintf("Workout has begun.\n");
         end
 
         function pause(obj)
-        if ~obj.IsWorkoutActive
-        fprintf("Workout must be active to pause.\n");
-        return;
-        end
+            if ~obj.IsWorkoutActive
+                fprintf("Workout must be active to pause.\n");
+            return;
+            end
 
-        obj.mobileDevConnection.Logging = 0;
-        if ~isempty(obj.T) && isvalid(obj.T)
-        stop(obj.T);
-        end
+            obj.mobileDevConnection.Logging = 0;
+            if ~isempty(obj.T) && isvalid(obj.T)
+                stop(obj.T);
+            end
 
-        obj.IsPaused = true;
-        fprintf("Workout paused.\n");
+            obj.IsPaused = true;
+            fprintf("Workout paused.\n");
         end
 
         function stop(obj)
-        if ~obj.IsWorkoutActive
-        fprintf("Workout must be active to stop.\n");
-        return;
-        end
+            if ~obj.IsWorkoutActive
+                fprintf("Workout must be active to stop.\n");
+            return;
+            end
 
-        obj.mobileDevConnection.Logging = 0;
-        if ~isempty(obj.T) && isvalid(obj.T)
-        stop(obj.T);
-        end
+            obj.mobileDevConnection.Logging = 0;
+            if ~isempty(obj.T) && isvalid(obj.T)
+                stop(obj.T);
+            end
 
-        obj.IsWorkoutActive = false;
-        obj.IsPaused = false;
-        fprintf("Workout stopped.\n");
+            obj.IsWorkoutActive = false;
+            obj.IsPaused = false;
+            fprintf("Workout stopped.\n");
         end
 
         %timer callback
         function timerUpdate(obj)
-        if ~obj.IsWorkoutActive || obj.IsPaused
-        return;
+            if ~obj.IsWorkoutActive || obj.IsPaused
+            return;
         end
         
         function getMaxValues
+        end
             
         function saveWorkoutFiles(obj)
             i = 1;
