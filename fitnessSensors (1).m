@@ -39,23 +39,14 @@ classdef fitnessSensors < handle
             end
         end
 
-        function logSensorData(obj, timeAmount, timeUnits, timeSeconds)
-
-            timeUnits = string(timeUnits);
-
-            if timeAmount > 0
-                fprintf("Starting workout for %d %s...\n", timeAmount, timeUnits);
+        function logSensorData(obj, hours, minutes, seconds)
+            timeSeconds = (hours * 3600) + (minutes * 60) + seconds;
+            if timeSeconds > 0
+                fprintf("Starting workout for %d hours, %d minutes, and %d seconds...\n", hours, minutes, seconds);
             end
 
             fprintf('\n Start \n')
-
-
-            if timeUnits == 'hours'
-                timeSeconds = timeAmount * 3600; % Convert hours to seconds
-            elseif timeUnits == 'minutes'
-                timeSeconds = timeAmount * 60; % Convert minutes to seconds
-            end
-
+            
             obj.mobileDevConnection.Logging = 1;
             pause(timeSeconds);
             obj.mobileDevConnection.Logging = 0;
