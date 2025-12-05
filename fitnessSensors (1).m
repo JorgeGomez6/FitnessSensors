@@ -8,6 +8,7 @@ classdef fitnessSensors < handle
         TimeHistory;
         Latitude;
         Longitude;
+        TimeStamp;
         Speed;
         Course;
         Altitude;
@@ -15,8 +16,17 @@ classdef fitnessSensors < handle
         Axes;
         SavePlot;
 
-        LatHistory double = [];   % Stores all latitude samples
-        LonHistory double = [];   % Stores all longitude samples
+        LatHistory double = [];   % stores latitude samples
+        LonHistory double = [];   % stores longitude samples
+        SpeedHistory double = []; % stores speed samples
+        AltitudeHistory double = []; % stores elevation samples
+
+        SpeedAxes;
+        ElevationAxes;
+        SpeedLine;
+        ElevationLine;
+        StatsTable;
+
 
         T;
 
@@ -44,6 +54,35 @@ classdef fitnessSensors < handle
                     'the MATLAB app is open on your phone...\n']);
             end
         end
+
+        % live chart & stats logic
+        function setupLiveDisplays(obj, speedAxes, elevationAxes, statsTable)
+            obj.SpeedAxes = speedAxes;
+            obj.ElevationAxes = elevationAxes;
+            obj.StatsTable = statsTable;
+
+            % elevation plot
+            hold(obj.ElevationAxes, "on");
+            obj.ElevationLine = plot(obj.ElevationAxes, obj.TimeStamp, obj.Altitude, 'LineWidth', 1.5);
+            title(obj.ElevationAxes, "Elevation vs Time");
+            xlabel(obj.ElevationAxes, "Time (s)");
+            ylabel(obj.ElevationAxes, "Elevation");
+            
+
+            % speed plot    
+            hold(obj.SpeedAxes, "on");
+            obj.SpeedLine = plot(obj.SpeedAxes, obj.TimeStamp, obj.Speed, 'LineWidth', 1.5);
+            title(obj.SpeedAxes, "Speed vs Time");
+            xlabel(obj.SpeedAxes, "Time (s)");
+            ylabel(obj.SpeedAxes, "Speed");
+            
+
+
+            % stats
+            obj.StatsTable.ColumnName = {'Statistic', 'Value'};
+            obj.StatsTable.Data = {};
+        end
+       
 
         %start/pause/stop logic
         
@@ -132,23 +171,29 @@ classdef fitnessSensors < handle
         end
         
         %timer callback
-        function timerUpdate(obj)
+        function timerUpdatePos(obj)
             if ~obj.IsWorkoutActive || obj.IsPaused
                 return;
             end
-            [lat, lon] = poslog(obj.mobileDevConnection);
+            [lat, lon, timestamp, speed, ~, alt, ~] = poslog(obj.mobileDevConnection);
 
             if isempty(lat)
                 return;
             end
-            
+
+            obj.TimeStamp = timestamp(:).';
+            obj.Speed = speed(:).';
+            obj.Altitude = alt(:).';
+
             % append to route
-            obj.LatHistory(end+1) = lat(end);
-            obj.LonHistory(end+1) = lon(end);
+            obj.LatHistory = lat(:).';
+            obj.LonHistory = lon(:).';
 
             % update the line data
-            obj.SavePlot.LatitudeData = obj.LatHistory;
-            obj.SavePlot.LongitudeData = obj.LonHistory;
+            if ~isempty(obj.SavePlot) && isvalid(obj.SavePlot)
+                obj.SavePlot.LatitudeData = obj.LatHistory;
+                obj.SavePlot.LongitudeData = obj.LonHistory;
+            end
 
             % auto-recenter with ~10% margin
             latMin = min(obj.LatHistory);
@@ -159,8 +204,14 @@ classdef fitnessSensors < handle
             dLat = (latMax - latMin) * 0.1;
             dLon = (lonMax - lonMin) * 0.1;
 
-            geolimits(obj.Axes, [latMin-dLat, latMax+dLat], [lonMin-dLon, lonMax+dLon]);
+            if ~isempty(obj.Axes) && isvalid(obj.Axes)
+                geolimits(obj.Axes, [latMin-dLat, latMax+dLat], [lonMin-dLon, lonMax+dLon]);
+            end
+
+            obj.updatePlotsAndStats();
         end
+        
+        % map
 
         function geoPlot(obj, Panel)
 
@@ -199,7 +250,6 @@ classdef fitnessSensors < handle
             [~, ~, ~, obj.Speed, obj.Course, obj.Altitude, obj.HorizontalAccuracy] = poslog(obj.mobileDevConnection);
 
             obj.TargetSignalTs = t;
-            obj.TimeHistory = datetime("now");
             obj.AccelerationSignal = A; 
             obj.VelocitySignal = V; 
         end
