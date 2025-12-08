@@ -1,34 +1,27 @@
 classdef fitnessSensors < handle
 
     properties
-        AccelerationSignal; % Acceleration signal
-        VelocitySignal; % Velocity Signal
-        TargetSignal; % Target Signal
-        TargetSignalTs; % Time stamp Signal
-        TimeHistory;
-        Latitude;
-        Longitude;
+        Latitude double = [];
+        Longitude double = [];
         TimeStamp;
         Speed;
-        Course;
-        Altitude;
-        HorizontalAccuracy;
+        Elevation;
+
         Axes;
-        SavePlot;
+        GeoMapPlot;
+        
+        SpeedPlot;
+        AVGSpeed;
+        STDSpeed;
+        TotalTime;
 
-        LatHistory double = [];   % stores latitude samples
-        LonHistory double = [];   % stores longitude samples
-        SpeedHistory double = []; % stores speed samples
-        AltitudeHistory double = []; % stores elevation samples
-
+        ElevationPlot;
         SpeedAxes;
         ElevationAxes;
-        SpeedLine;
-        ElevationLine;
         StatsTable;
 
-
         T;
+        StopTimer;
 
         IsWorkoutActive logical = false;
         IsPaused logical = false;
@@ -55,44 +48,17 @@ classdef fitnessSensors < handle
             end
         end
 
-        % live chart & stats logic
-        function setupLiveDisplays(obj, speedAxes, elevationAxes, statsTable)
-            obj.SpeedAxes = speedAxes;
-            obj.ElevationAxes = elevationAxes;
-            obj.StatsTable = statsTable;
-
-            % elevation plot
-            hold(obj.ElevationAxes, "on");
-            obj.ElevationLine = plot(obj.ElevationAxes, obj.TimeStamp, obj.Altitude, 'LineWidth', 1.5);
-            title(obj.ElevationAxes, "Elevation vs Time");
-            xlabel(obj.ElevationAxes, "Time (s)");
-            ylabel(obj.ElevationAxes, "Elevation");
-            
-
-            % speed plot    
-            hold(obj.SpeedAxes, "on");
-            obj.SpeedLine = plot(obj.SpeedAxes, obj.TimeStamp, obj.Speed, 'LineWidth', 1.5);
-            title(obj.SpeedAxes, "Speed vs Time");
-            xlabel(obj.SpeedAxes, "Time (s)");
-            ylabel(obj.SpeedAxes, "Speed");
-            
-
-
-            % stats
-            obj.StatsTable.ColumnName = {'Statistic', 'Value'};
-            obj.StatsTable.Data = {};
-        end
-       
-
         %start/pause/stop logic
         
         function start(obj, hours, minutes, seconds)
-            
-            if obj.IsWorkoutActive && ~obj.IsPaused
-                fprintf("Workout is already running.\n");
-                return;
-            end
 
+            % Timer fires every second
+            obj.T = timer( ...
+                "ExecutionMode", "fixedSpacing", ...
+                "Period", 1, ...
+                "TimerFcn", @(~,~) obj.timerUpdatePos() );
+
+           
             timeSeconds = (hours * 3600) + (minutes * 60) + seconds;
 
             if timeSeconds > 0
@@ -100,42 +66,26 @@ classdef fitnessSensors < handle
             else
                 fprintf("Starting workout with no time limit...\n");
             end
-
-            obj.mobileDevConnection.AccelerationSensorEnabled = 1;
-            obj.mobileDevConnection.AngularVelocitySensorEnabled = 1;
-            obj.mobileDevConnection.PositionSensorEnabled = 1;
             
             obj.mobileDevConnection.Logging = 1;
-            obj.IsWorkoutActive = true;
-            obj.IsPaused = false;
 
             obj.IsWorkoutActive = true;
             obj.IsPaused = false;
-
-            if ~isempty(obj.T) && isvalid(obj.T) && strcmp(obj.T.Running,"off")
-                start(obj.T);
-            end
 
             fprintf("Workout has begun.\n");
 
             % If a positive duration was given, schedule auto‑stop
             if timeSeconds > 0
-                stopTimer = timer( ...
+                obj.StopTimer = timer( ...
                     "ExecutionMode","singleShot", ...
                     "StartDelay", timeSeconds, ...
                     "TimerFcn", @(~,~) obj.stop() );
-                start(stopTimer);
-                % clean up after firing
-                stopTimer.StopFcn = @(~,~) delete(stopTimer);
+                start(obj.StopTimer);
             end
 
         end
 
         function pause(obj)
-            if ~obj.IsWorkoutActive
-                fprintf("Workout must be active to pause.\n");
-                return;
-            end
 
             obj.mobileDevConnection.Logging = 0;
             if ~isempty(obj.T) && isvalid(obj.T)
@@ -147,31 +97,86 @@ classdef fitnessSensors < handle
         end
 
         function stop(obj)
-            if ~obj.IsWorkoutActive
-                fprintf("Workout must be active to stop.\n");
-                return;
-            end
 
             obj.mobileDevConnection.Logging = 0;
+            delete(timerfindall)
             if ~isempty(obj.T) && isvalid(obj.T)
                 stop(obj.T);
+                delete(obj.T);
+                obj.T = [];
             end
 
-            obj.T = [];
-
-            try
-                clear obj.mobileDevConnection;
-            catch
-                obj.mobileDevConnection = [];
+            if ~isempty(obj.StopTimer) && isvalid(obj.StopTimer)
+                stop(obj.StopTimer);
+                delete(obj.StopTimer);
+                obj.StopTimer = [];
             end
+
 
             obj.IsWorkoutActive = false;
             obj.IsPaused = false;
             fprintf("Workout stopped.\n");
         end
+
+        function reset(obj)
+
+            if ~isempty(obj.mobileDevConnection)
+                discardlogs(obj.mobileDevConnection);
+            end
+
+
+            % 1. Stop & delete timers
+            if ~isempty(obj.T) && isvalid(obj.T)
+                stop(obj.T);
+                delete(obj.T);
+            end
+            obj.T = [];
+
+            if isprop(obj, "StopTimer") && ~isempty(obj.StopTimer) && isvalid(obj.StopTimer)
+                stop(obj.StopTimer);
+                delete(obj.StopTimer);
+            end
+            obj.StopTimer = [];
+
+            % 3. Reset latest values
+            obj.TimeStamp = [];
+            obj.Speed = [];
+            obj.Elevation = [];
+            obj.Latitude = [];
+            obj.Longitude = [];
+            obj.AVGSpeed = [];
+            obj.STDSpeed = [];
+            obj.TotalTime = [];
+
+            % 4. Reset stats
+            if ~isempty(obj.StatsTable)
+                obj.StatsTable.Data = {};
+            end
+
+            % 5. Reset plots ONLY by clearing their data
+            if ~isempty(obj.GeoMapPlot) && isvalid(obj.GeoMapPlot)
+                obj.GeoMapPlot.LatitudeData = NaN;
+                obj.GeoMapPlot.LongitudeData = NaN;
+            end
+
+            if ~isempty(obj.SpeedPlot) && isvalid(obj.SpeedPlot)
+                obj.SpeedPlot.XData = NaN;
+                obj.SpeedPlot.YData = NaN;
+            end
+
+            if ~isempty(obj.ElevationPlot) && isvalid(obj.ElevationPlot)
+                obj.ElevationPlot.XData = NaN;
+                obj.ElevationPlot.YData = NaN;
+            end
+
+            fprintf("Workout reset complete.\n");
+        end
         
         %timer callback
         function timerUpdatePos(obj)
+
+            % Make sure timer is still valid
+
             if ~obj.IsWorkoutActive || obj.IsPaused
                 return;
             end
@@ -183,23 +188,33 @@ classdef fitnessSensors < handle
 
             obj.TimeStamp = timestamp(:).';
             obj.Speed = speed(:).';
-            obj.Altitude = alt(:).';
+            obj.Elevation = alt(:).';
 
             % append to route
-            obj.LatHistory = lat(:).';
-            obj.LonHistory = lon(:).';
+            obj.Latitude = lat(:).';
+            obj.Longitude = lon(:).';
 
             % update the line data
-            if ~isempty(obj.SavePlot) && isvalid(obj.SavePlot)
-                obj.SavePlot.LatitudeData = obj.LatHistory;
-                obj.SavePlot.LongitudeData = obj.LonHistory;
+            if ~isempty(obj.GeoMapPlot) && isvalid(obj.GeoMapPlot)
+                obj.GeoMapPlot.LatitudeData  = obj.Latitude;
+                obj.GeoMapPlot.LongitudeData = obj.Longitude;
+            end
+
+            if ~isempty(speed)
+                obj.SpeedPlot.XData = obj.TimeStamp;
+                obj.SpeedPlot.YData = obj.Speed;
+            end
+
+            if ~isempty(alt)
+                obj.ElevationPlot.XData = obj.TimeStamp;
+                obj.ElevationPlot.YData = obj.Elevation;
             end
 
             % auto-recenter with ~10% margin
-            latMin = min(obj.LatHistory);
-            latMax = max(obj.LatHistory);
-            lonMin = min(obj.LonHistory);
-            lonMax = max(obj.LonHistory);
+            latMin = min(obj.Latitude);
+            latMax = max(obj.Latitude);
+            lonMin = min(obj.Longitude);
+            lonMax = max(obj.Longitude);
 
             dLat = (latMax - latMin) * 0.1;
             dLon = (lonMax - lonMin) * 0.1;
@@ -208,79 +223,83 @@ classdef fitnessSensors < handle
                 geolimits(obj.Axes, [latMin-dLat, latMax+dLat], [lonMin-dLon, lonMax+dLon]);
             end
 
-            obj.updatePlotsAndStats();
+            if isempty(obj.TimeStamp)
+                obj.StatsTable.Data = {};
+            end
+
+            obj.TotalTime = max(obj.TimeStamp);
+            obj.AVGSpeed  = mean(obj.Speed, "omitnan");
+            obj.STDSpeed  = std(obj.Speed, "omitnan");
+
+            obj.StatsTable.Data = {
+                obj.TotalTime;
+                obj.AVGSpeed;
+                obj.STDSpeed;
+            };
         end
-        
-        % map
+
+        % live chart & stats logic
+        function setupLiveDisplays(obj, speedAxes, elevationAxes, statsTable)
+            obj.SpeedAxes = speedAxes;
+            obj.ElevationAxes = elevationAxes;
+            obj.StatsTable = statsTable;
+
+            % elevation plot
+            if isempty(obj.ElevationPlot) || ~isvalid(obj.ElevationPlot)
+                hold(obj.ElevationAxes, "on");
+                obj.ElevationPlot = plot(obj.ElevationAxes, NaN, NaN, 'LineWidth', 2);
+                title(obj.ElevationAxes, "Elevation vs Time");
+                xlabel(obj.ElevationAxes, "Time (s)");
+                ylabel(obj.ElevationAxes, "Elevation");
+            end
+            
+            % speed plot
+            if isempty(obj.SpeedPlot) || ~isvalid(obj.SpeedPlot)
+                hold(obj.SpeedAxes, "on");
+                obj.SpeedPlot = plot(obj.SpeedAxes, NaN, NaN, 'LineWidth', 2);
+                title(obj.SpeedAxes, "Speed vs Time");
+                xlabel(obj.SpeedAxes, "Time (s)");
+                ylabel(obj.SpeedAxes, "Speed");
+            end
+
+            % stats
+            obj.StatsTable.ColumnName = {'Value'};
+            obj.StatsTable.RowName = {'Total Time (s)', 'Average Speed', 'Standard Deviation Speed'};
+            obj.StatsTable.Data = {};
+        end
 
         function geoPlot(obj, Panel)
 
-            % Create 2D interactive geoaxes
-            gx = geoaxes(Panel, 'Basemap', 'streets');  % or 'satellite', 'topographic', etc.
-            obj.Axes = gx;
-
-
-            obj.SavePlot = geoplot(obj.Axes, NaN, NaN, 'r-', 'LineWidth', 2);
-
+            if isempty(obj.GeoMapPlot) || ~isvalid(obj.GeoMapPlot)
+                % Create 2D interactive geoaxes
+                gx = geoaxes(Panel, 'Basemap', 'streets');  % or 'satellite', 'topographic', etc.
+                obj.Axes = gx;
+                obj.GeoMapPlot = geoplot(obj.Axes, NaN, NaN, 'r-', 'LineWidth', 2);
+            end
 
         end
 
         function geoPlotLine(obj)
 
-            % Timer fires every second
-            obj.T = timer( ...
-                "ExecutionMode", "fixedSpacing", ...
-                "Period", 1, ...
-                "TimerFcn", @(~,~) obj.timerUpdate() );
             start(obj.T);
 
             % set starting view
-            if size(obj.LatHistory) == 1
+            if size(obj.Latitude) == 1
                 geolimits(obj.Axes, ...
-                [obj.LatHistory(end)-100, obj.LatHistory(end)+100], ...
-                [obj.LonHistory(end)-100, obj.LonHistory(end)+100]);
-            end
-            
-        end
-        
-        function setTargetSignal(obj)
-
-            [A, t] = accellog(obj.mobileDevConnection);
-            [V, ~] = angvellog(obj.mobileDevConnection);
-            [~, ~, ~, obj.Speed, obj.Course, obj.Altitude, obj.HorizontalAccuracy] = poslog(obj.mobileDevConnection);
-
-            obj.TargetSignalTs = t;
-            obj.AccelerationSignal = A; 
-            obj.VelocitySignal = V; 
-        end
-
-        function getMaxValues(obj)
-            max(abs(obj.AccelerationSignal))
-            max(abs(obj.VelocitySignal))
+                [obj.Latitude(end)-0.005, obj.Latitude(end)+0.005], ...
+                [obj.Longitude(end)-0.005, obj.Longitude(end)+0.005]);
+            end     
         end
             
         function saveWorkoutFiles(obj)
-            i = 1;
-            filename = 'Workout ' + string(i);
-            saveas(obj.SavePlot,filename, 'png');
-            i = i + 1;
-        end
+            geoFilename = 'Workout Map: ' + string(datetime('now'));
+            saveas(obj.GeoMapPlot,geoFilename, 'png');
 
-        function delete(obj)
-            % Kill timer if it exists
-            try
-                if ~isempty(obj.T) && isvalid(obj.T)
-                    stop(obj.T);
-                    delete(obj.T);
-                end
-            end
+            SpeedFilename = 'Speed Graph: ' + string(datetime('now'));
+            saveas(obj.SpeedPlot, SpeedFilename, 'png')
 
-            % Disconnect mobile device cleanly
-            try
-                if ~isempty(obj.mobileDevConnection)
-                    disconnect(obj.mobileDevConnection);
-                end
-            end
+            ElevationFilename = 'Elevation Graph: ' + string(datetime('now'));
+            saveas(obj.ElevationPlot, ElevationFilename, 'png')
         end
     end
 end
