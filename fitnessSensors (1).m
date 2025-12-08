@@ -235,11 +235,13 @@ classdef fitnessSensors < handle
             obj.TotalTime = max(obj.TimeStamp);
             obj.AVGSpeed  = mean(obj.Speed, "omitnan");
             obj.STDSpeed  = std(obj.Speed, "omitnan");
+            obj.ElevationGainLoss = sum(diff(obj.Elevation));
 
             obj.StatsTable.Data = {
                 obj.TotalTime;
                 obj.AVGSpeed;
                 obj.STDSpeed;
+                obj.ElevationGainLoss;
             };
         end
 
@@ -255,7 +257,7 @@ classdef fitnessSensors < handle
                 obj.ElevationPlot = plot(obj.ElevationAxes, NaN, NaN, 'LineWidth', 2);
                 title(obj.ElevationAxes, "Elevation vs Time");
                 xlabel(obj.ElevationAxes, "Time (s)");
-                ylabel(obj.ElevationAxes, "Elevation");
+                ylabel(obj.ElevationAxes, "Elevation (m)");
             end
             
             % speed plot
@@ -264,12 +266,12 @@ classdef fitnessSensors < handle
                 obj.SpeedPlot = plot(obj.SpeedAxes, NaN, NaN, 'LineWidth', 2);
                 title(obj.SpeedAxes, "Speed vs Time");
                 xlabel(obj.SpeedAxes, "Time (s)");
-                ylabel(obj.SpeedAxes, "Speed");
+                ylabel(obj.SpeedAxes, "Speed (m/s)");
             end
 
             % stats
             obj.StatsTable.ColumnName = {'Value'};
-            obj.StatsTable.RowName = {'Total Time (s)', 'Average Speed', 'Standard Deviation Speed'};
+            obj.StatsTable.RowName = {'Total Time (s)', 'Average Speed(m/s)', 'Standard Deviation Speed (m/s)', 'Elevation Gain/Loss (m)'};
             obj.StatsTable.Data = {};
         end
 
