@@ -13,6 +13,7 @@ classdef fitnessSensors < handle
         SpeedPlot;
         AVGSpeed;
         STDSpeed;
+        ElevationGainLoss;
         TotalTime;
 
         ElevationPlot;
@@ -22,6 +23,10 @@ classdef fitnessSensors < handle
 
         T;
         StopTimer;
+
+        WorkoutNames (1,:) string;        % Names shown in dropdown
+        WorkoutData;                      % Struct array for each workout
+        SaveFile = "workoutHistory.mat";  % Where permanent data is stored
 
         IsWorkoutActive logical = false;
         IsPaused logical = false;
@@ -124,7 +129,6 @@ classdef fitnessSensors < handle
                 discardlogs(obj.mobileDevConnection);
             end
 
-
             % 1. Stop & delete timers
             if ~isempty(obj.T) && isvalid(obj.T)
                 stop(obj.T);
@@ -146,6 +150,7 @@ classdef fitnessSensors < handle
             obj.Longitude = [];
             obj.AVGSpeed = [];
             obj.STDSpeed = [];
+            obj.ElevationGainLoss = [];
             obj.TotalTime = [];
 
             % 4. Reset stats
@@ -291,15 +296,45 @@ classdef fitnessSensors < handle
             end     
         end
             
-        function saveWorkoutFiles(obj)
-            geoFilename = 'Workout Map: ' + string(datetime('now'));
-            saveas(obj.GeoMapPlot,geoFilename, 'png');
-
-            SpeedFilename = 'Speed Graph: ' + string(datetime('now'));
-            saveas(obj.SpeedPlot, SpeedFilename, 'png')
-
-            ElevationFilename = 'Elevation Graph: ' + string(datetime('now'));
-            saveas(obj.ElevationPlot, ElevationFilename, 'png')
+        function loadSavedWorkouts(obj)
+            if isfile(obj.SaveFile)
+                S = load(obj.SaveFile);
+                obj.WorkoutNames = S.WorkoutNames;
+                obj.WorkoutData  = S.WorkoutData;
+            else
+                obj.WorkoutNames = string.empty;
+                obj.WorkoutData  = struct.empty;
+            end
         end
+        function saveWorkout(obj, workName, lat, lon, speed, elevation, t)
+
+            workoutStruct = struct( ...
+                'Name', workName, ...
+                'Latitude', lat(:).', ...
+                'Longitude', lon(:).', ...
+                'Speed', speed(:).', ...
+                'Elevation', elevation(:).', ...
+                'TimeStamp', t(:).' ...
+            );
+
+            % Append new workout
+            obj.WorkoutNames(end+1) = workName;
+            obj.WorkoutData(end+1)  = workoutStruct;
+
+            % Save permanently
+            WorkNames = obj.WorkoutNames;
+            WorkData  = obj.WorkoutData;
+            save(obj.SaveFile, "WorkNames", "WorkData");
+        end
+
+        function workout = loadWorkout(obj, workoutName)
+            idx = find(obj.WorkoutNames == workoutName, 1);
+            if isempty(idx)
+                workout = [];
+            else
+                workout = obj.WorkoutData(idx);
+            end
+        end
+
     end
 end
