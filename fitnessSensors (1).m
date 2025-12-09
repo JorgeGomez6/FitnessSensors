@@ -7,6 +7,17 @@ classdef fitnessSensors < handle
         Speed;
         Elevation;
 
+        lat;
+        StoreLat;
+        lon;
+        StoreLon;
+        Tstamp;
+        StoreTime;
+        spd;
+        StoreSpd;
+        alt;
+        StoreAlt;
+
         Axes;
         GeoMapPlot;
         
@@ -27,14 +38,21 @@ classdef fitnessSensors < handle
 
         WorkoutNames (1,:) string;        % Names shown in dropdown
         WorkoutData = struct( ...
-                        'Latitude', {}, ...
-                        'Longitude', {}, ...
-                        'TimeStamp', {}, ...
-                        'Speed', {}, ...
-                        'Elevation', {}, ...
-                        'Stats', {} );  % Struct array for each workout
-        WorkoutDropDown;
-        SaveFile = "workoutHistory.mat"  % Where permanent data is stored
+            'Latitude', {}, ...
+            'Longitude', {}, ...
+            'TimeStamp', {}, ...
+            'Speed', {}, ...
+            'Elevation', {}, ...
+            'Stats', {} );  % Struct array for each workout
+
+        WorkoutFile = "workoutHistory.mat"  % Where permanent data is stored
+        
+        
+        AchievementData = struct( ...
+            'FastestRun', [], ...
+            'LongestDistance', [], ...
+            'HighestElevationGain', [], ...
+            'LongestDuration', []);
 
         IsWorkoutActive logical = false;
         IsPaused logical = false;
@@ -113,8 +131,18 @@ classdef fitnessSensors < handle
         end
 
         function unpause(obj)
-            
+
+            if obj.IsWorkoutActive && obj.IsPaused
+
+                % Restart the timer
+                start(obj.T);
+
+            obj.mobileDevConnection.Logging = 1;
+            obj.IsPaused = false;
+            fprintf("Workout resumed.\n");
+            end
         end
+
 
         function stop(obj)
 
@@ -204,20 +232,21 @@ classdef fitnessSensors < handle
             if ~obj.IsWorkoutActive || obj.IsPaused
                 return;
             end
-            [lat, lon, timestamp, speed, ~, alt, ~] = ...
+            
+            [obj.lat, obj.lon, obj.Tstamp, obj.spd, ~, obj.alt, ~] = ...
                 poslog(obj.mobileDevConnection);
 
-            if isempty(lat)
+            if isempty(obj.lat)
                 return;
             end
 
-            obj.TimeStamp = timestamp(:).';
-            obj.Speed = speed(:).';
-            obj.Elevation = alt(:).';
+            obj.TimeStamp = obj.Tstamp(:).';
+            obj.Speed = obj.spd(:).';
+            obj.Elevation = obj.alt(:).';
 
             % append to route
-            obj.Latitude = lat(:).';
-            obj.Longitude = lon(:).';
+            obj.Latitude = obj.lat(:).';
+            obj.Longitude = obj.lon(:).';
 
             % update line data
             if ~isempty(obj.GeoMapPlot) && isvalid(obj.GeoMapPlot)
@@ -225,12 +254,12 @@ classdef fitnessSensors < handle
                 obj.GeoMapPlot.LongitudeData = obj.Longitude;
             end
 
-            if ~isempty(speed)
+            if ~isempty(obj.spd)
                 obj.SpeedPlot.XData = obj.TimeStamp;
                 obj.SpeedPlot.YData = obj.Speed;
             end
 
-            if ~isempty(alt)
+            if ~isempty(obj.alt)
                 obj.ElevationPlot.XData = obj.TimeStamp;
                 obj.ElevationPlot.YData = obj.Elevation;
             end
@@ -327,8 +356,8 @@ classdef fitnessSensors < handle
             
         function loadSavedWorkouts(obj)
 
-            if isfile(obj.SaveFile)
-                S = load(obj.SaveFile);
+            if isfile(obj.WorkoutFile)
+                S = load(obj.WorkoutFile);
                 if isfield(S,"WorkNames") && isfield(S,"WorkData")
                     obj.WorkoutNames = S.WorkNames;
                     obj.WorkoutData  = S.WorkData;
@@ -368,7 +397,7 @@ classdef fitnessSensors < handle
             % Save to file
             WorkNames = obj.WorkoutNames;
             WorkData  = obj.WorkoutData;
-            save(obj.SaveFile,"WorkNames","WorkData")
+            save(obj.WorkoutFile,"WorkNames","WorkData")
         end
 
         function loadWorkout(obj, workoutName)
@@ -430,6 +459,47 @@ classdef fitnessSensors < handle
 
             fprintf("Workout '%s' loaded.\n", workoutName);
 
+        end
+
+        function achievements = getAchievements(obj)
+
+            if isfile(obj.WorkoutFile)
+                F = load(obj.WorkoutFile);
+                if isfield(F,"Achievements")
+                    obj.AchievementData = F.AchData;
+                else
+                    obj.AchievementData = struct( ...
+                    'FastestRun', {}, ...
+                    'LongestDistance', {}, ...
+                    'HighestElevationGain', {}, ...
+                    'LongestDuration', {});
+                end
+
+
+            end
+
+            [maxSpeed, idxSpeed] = max([obj.WorkoutData.MaxSpeed]);
+            fastestRun = struct('Name', obj.WorkoutData(idxSpeed).Name, ...
+                'Speed', maxSpeed, 'Date', obj.WorkoutData(idxSpeed).Date);
+
+      
+            [maxDist, idxDist] = max([obj.WorkoutData.TotalDistance]);
+            longestDistance = struct('Name', obj.WorkoutData(idxDist).Name, ...
+                'Distance', maxDist, 'Date', obj.WorkoutData(idxDist).Date);
+
+            [maxGain, idxGain] = max([obj.WorkoutData.ElevationGain]);
+            highestGain = struct('Name', obj.WorkoutData(idxGain).Name, ...
+                'Gain', maxGain, 'Date', obj.WorkoutData(idxGain).Date);
+
+           
+            [maxDur, idxDur] = max([obj.WorkoutData.Duration]);
+            longestDuration = struct('Name', obj.WorkoutData(idxDur).Name, ...
+                'Duration', maxDur, 'Date', obj.WorkoutData(idxDur).Date);
+
+            achievements = struct('FastestRun', fastestRun, ...
+                'LongestDistance', longestDistance, ...
+                'HighestElevationGain', highestGain, ...
+                'LongestDuration', longestDuration);
         end
 
     end
