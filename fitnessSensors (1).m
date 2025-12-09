@@ -26,9 +26,15 @@ classdef fitnessSensors < handle
         DateAndTime;
 
         WorkoutNames (1,:) string;        % Names shown in dropdown
-        WorkoutData;                      % Struct array for each workout
+        WorkoutData = struct( ...
+                        'Latitude', {}, ...
+                        'Longitude', {}, ...
+                        'TimeStamp', {}, ...
+                        'Speed', {}, ...
+                        'Elevation', {}, ...
+                        'Stats', {} );  % Struct array for each workout
         WorkoutDropDown;
-        SaveFile = "workoutHistory.mat";  % Where permanent data is stored
+        SaveFile = "workoutHistory.mat"  % Where permanent data is stored
 
         IsWorkoutActive logical = false;
         IsPaused logical = false;
@@ -69,7 +75,8 @@ classdef fitnessSensors < handle
             timeSeconds = (hours * 3600) + (minutes * 60) + seconds;
 
             if timeSeconds > 0
-                fprintf("Starting workout for %d hours, %d minutes, and %d seconds...\n", hours, minutes, seconds);
+                fprintf("Starting workout for %d hours, %d minutes," + ...
+                    " and %d seconds...\n", hours, minutes, seconds);
             else
                 fprintf("Starting workout with no time limit...\n");
             end
@@ -105,6 +112,10 @@ classdef fitnessSensors < handle
             fprintf("Workout paused.\n");
         end
 
+        function unpause(obj)
+            
+        end
+
         function stop(obj)
 
             obj.mobileDevConnection.Logging = 0;
@@ -133,20 +144,24 @@ classdef fitnessSensors < handle
                 discardlogs(obj.mobileDevConnection);
             end
 
-            % 1. Stop & delete timers
+            % Stop & delete timers
             if ~isempty(obj.T) && isvalid(obj.T)
                 stop(obj.T);
                 delete(obj.T);
             end
+
             obj.T = [];
 
-            if isprop(obj, "StopTimer") && ~isempty(obj.StopTimer) && isvalid(obj.StopTimer)
+            if isprop(obj, "StopTimer") && ~isempty(obj.StopTimer) && ...
+                    isvalid(obj.StopTimer)
+                
                 stop(obj.StopTimer);
                 delete(obj.StopTimer);
             end
+
             obj.StopTimer = [];
 
-            % 3. Reset latest values
+            % Reset latest values
             obj.TimeStamp = [];
             obj.Speed = [];
             obj.Elevation = [];
@@ -157,12 +172,12 @@ classdef fitnessSensors < handle
             obj.ElevationGainLoss = [];
             obj.TotalTime = [];
 
-            % 4. Reset stats
+            % Reset stats
             if ~isempty(obj.StatsTable)
                 obj.StatsTable.Data = {};
             end
 
-            % 5. Reset plots ONLY by clearing their data
+            % Reset plots data
             if ~isempty(obj.GeoMapPlot) && isvalid(obj.GeoMapPlot)
                 obj.GeoMapPlot.LatitudeData = NaN;
                 obj.GeoMapPlot.LongitudeData = NaN;
@@ -181,7 +196,7 @@ classdef fitnessSensors < handle
             fprintf("Workout reset complete.\n");
         end
         
-        %timer callback
+        % timer callback
         function timerUpdatePos(obj)
 
             % Make sure timer is still valid
@@ -189,7 +204,8 @@ classdef fitnessSensors < handle
             if ~obj.IsWorkoutActive || obj.IsPaused
                 return;
             end
-            [lat, lon, timestamp, speed, ~, alt, ~] = poslog(obj.mobileDevConnection);
+            [lat, lon, timestamp, speed, ~, alt, ~] = ...
+                poslog(obj.mobileDevConnection);
 
             if isempty(lat)
                 return;
@@ -203,7 +219,7 @@ classdef fitnessSensors < handle
             obj.Latitude = lat(:).';
             obj.Longitude = lon(:).';
 
-            % update the line data
+            % update line data
             if ~isempty(obj.GeoMapPlot) && isvalid(obj.GeoMapPlot)
                 obj.GeoMapPlot.LatitudeData  = obj.Latitude;
                 obj.GeoMapPlot.LongitudeData = obj.Longitude;
@@ -229,7 +245,8 @@ classdef fitnessSensors < handle
             dLon = (lonMax - lonMin) * 0.1;
 
             if ~isempty(obj.Axes) && isvalid(obj.Axes)
-                geolimits(obj.Axes, [latMin-dLat, latMax+dLat], [lonMin-dLon, lonMax+dLon]);
+                geolimits(obj.Axes, [latMin-dLat, latMax+dLat], ...
+                    [lonMin-dLon, lonMax+dLon]);
             end
 
             if isempty(obj.TimeStamp)
@@ -250,7 +267,8 @@ classdef fitnessSensors < handle
         end
 
         % live chart & stats logic
-        function setupLiveDisplays(obj, speedAxes, elevationAxes, statsTable)
+        function setupLiveDisplays(obj, speedAxes, elevationAxes, ...
+                statsTable)
             obj.SpeedAxes = speedAxes;
             obj.ElevationAxes = elevationAxes;
             obj.StatsTable = statsTable;
@@ -258,7 +276,8 @@ classdef fitnessSensors < handle
             % elevation plot
             if isempty(obj.ElevationPlot) || ~isvalid(obj.ElevationPlot)
                 hold(obj.ElevationAxes, "on");
-                obj.ElevationPlot = plot(obj.ElevationAxes, NaN, NaN, 'LineWidth', 2);
+                obj.ElevationPlot = plot(obj.ElevationAxes, NaN, NaN, ...
+                    'LineWidth', 2);
                 title(obj.ElevationAxes, "Elevation vs Time");
                 xlabel(obj.ElevationAxes, "Time (s)");
                 ylabel(obj.ElevationAxes, "Elevation (m)");
@@ -267,7 +286,8 @@ classdef fitnessSensors < handle
             % speed plot
             if isempty(obj.SpeedPlot) || ~isvalid(obj.SpeedPlot)
                 hold(obj.SpeedAxes, "on");
-                obj.SpeedPlot = plot(obj.SpeedAxes, NaN, NaN, 'LineWidth', 2);
+                obj.SpeedPlot = plot(obj.SpeedAxes, NaN, NaN, ...
+                    'LineWidth', 2);
                 title(obj.SpeedAxes, "Speed vs Time");
                 xlabel(obj.SpeedAxes, "Time (s)");
                 ylabel(obj.SpeedAxes, "Speed (m/s)");
@@ -275,7 +295,9 @@ classdef fitnessSensors < handle
 
             % stats
             obj.StatsTable.ColumnName = {'Value'};
-            obj.StatsTable.RowName = {'Total Time (s)', 'Average Speed(m/s)', 'Standard Deviation Speed (m/s)', 'Elevation Gain/Loss (m)'};
+            obj.StatsTable.RowName = {'Total Time (s)', ['Average ' ...
+                'Speed(m/s)'], 'Standard Deviation Speed (m/s)', ...
+                'Elevation Gain/Loss (m)'};
             obj.StatsTable.Data = {};
         end
 
@@ -283,9 +305,10 @@ classdef fitnessSensors < handle
 
             if isempty(obj.GeoMapPlot) || ~isvalid(obj.GeoMapPlot)
                 % Create 2D interactive geoaxes
-                gx = geoaxes(Panel, 'Basemap', 'streets');  % or 'satellite', 'topographic', etc.
+                gx = geoaxes(Panel, 'Basemap', 'streets'); 
                 obj.Axes = gx;
-                obj.GeoMapPlot = geoplot(obj.Axes, NaN, NaN, 'r-', 'LineWidth', 2);
+                obj.GeoMapPlot = geoplot(obj.Axes, NaN, NaN, 'r-', ... 
+                    'LineWidth', 2);
             end
 
         end
@@ -302,17 +325,24 @@ classdef fitnessSensors < handle
             end     
         end
             
-        function loadSavedWorkouts(obj, dropDown)
-            
-            obj.WorkoutDropDown = dropDown;
+        function loadSavedWorkouts(obj)
 
             if isfile(obj.SaveFile)
                 S = load(obj.SaveFile);
-                obj.WorkoutNames = S.WorkoutNames;
-                obj.WorkoutData  = S.WorkoutData;
-            else
-                obj.WorkoutNames = string.empty;
-                obj.WorkoutData  = struct.empty;
+                if isfield(S,"WorkNames") && isfield(S,"WorkData")
+                    obj.WorkoutNames = S.WorkNames;
+                    obj.WorkoutData  = S.WorkData;
+                else
+                    obj.WorkoutNames = string.empty;
+                    obj.WorkoutData = struct( ...
+                        'Latitude', {}, ...
+                        'Longitude', {}, ...
+                        'TimeStamp', {}, ...
+                        'Speed', {}, ...
+                        'Elevation', {}, ...
+                        'Stats', {} );
+
+                end
             end
         end
 
@@ -332,31 +362,29 @@ classdef fitnessSensors < handle
             );
 
             % Store
-            
-            obj.WorkoutNames(end+1) = obj.DateAndTime;
+            obj.WorkoutNames(end+1) = string(obj.DateAndTime);
             obj.WorkoutData(end+1)  = workoutStruct;
 
             % Save to file
             WorkNames = obj.WorkoutNames;
             WorkData  = obj.WorkoutData;
-            save(obj.SaveFile,"WorkNames","WorkData");
+            save(obj.SaveFile,"WorkNames","WorkData")
         end
-
-
 
         function loadWorkout(obj, workoutName)
 
-            % 1. Find which workout
+            % Find workout
             idx = find(obj.WorkoutNames == workoutName, 1);
+            
             if isempty(idx)
                 warning("Workout not found.");
                 return;
             end
 
-            % 2. Fetch stored struct
+            % Fetch stored struct
             W = obj.WorkoutData(idx);
 
-            % 3. Restore raw data into object
+            % Restore data into object
             obj.Latitude  = W.Latitude;
             obj.Longitude = W.Longitude;
             obj.TimeStamp = W.TimeStamp;
@@ -369,7 +397,7 @@ classdef fitnessSensors < handle
             obj.STDSpeed           = W.Stats.STDSpeed;
             obj.ElevationGainLoss  = W.Stats.ElevationGainLoss;
 
-            % 4. Update plots (only if they exist)
+            % 4. Update plots
             if ~isempty(obj.SpeedPlot) && isvalid(obj.SpeedPlot)
                 obj.SpeedPlot.XData = obj.TimeStamp;
                 obj.SpeedPlot.YData = obj.Speed;
@@ -380,7 +408,7 @@ classdef fitnessSensors < handle
                 obj.ElevationPlot.YData = obj.Elevation;
             end
 
-            % 5. Update geo map
+            % Update geo map
             if ~isempty(obj.GeoMapPlot) && isvalid(obj.GeoMapPlot)
                 obj.GeoMapPlot.LatitudeData  = obj.Latitude;
                 obj.GeoMapPlot.LongitudeData = obj.Longitude;
@@ -390,7 +418,7 @@ classdef fitnessSensors < handle
                 geolimits(obj.Axes, [latMin latMax], [lonMin lonMax]);
             end
 
-            % 6. Update stats table
+            % Update stats table
             if ~isempty(obj.StatsTable)
                 obj.StatsTable.Data = {
                     obj.TotalTime;
