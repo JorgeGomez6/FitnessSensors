@@ -23,9 +23,11 @@ classdef fitnessSensors < handle
 
         T;
         StopTimer;
+        DateAndTime;
 
         WorkoutNames (1,:) string;        % Names shown in dropdown
         WorkoutData;                      % Struct array for each workout
+        WorkoutDropDown;
         SaveFile = "workoutHistory.mat";  % Where permanent data is stored
 
         IsWorkoutActive logical = false;
@@ -73,6 +75,8 @@ classdef fitnessSensors < handle
             end
             
             obj.mobileDevConnection.Logging = 1;
+
+            obj.DateAndTime = datetime('now');
 
             obj.IsWorkoutActive = true;
             obj.IsPaused = false;
@@ -298,7 +302,10 @@ classdef fitnessSensors < handle
             end     
         end
             
-        function loadSavedWorkouts(obj)
+        function loadSavedWorkouts(obj, dropDown)
+            
+            obj.WorkoutDropDown = dropDown;
+
             if isfile(obj.SaveFile)
                 S = load(obj.SaveFile);
                 obj.WorkoutNames = S.WorkoutNames;
@@ -308,34 +315,93 @@ classdef fitnessSensors < handle
                 obj.WorkoutData  = struct.empty;
             end
         end
-        function saveWorkout(obj, workName, lat, lon, speed, elevation, t)
+
+        function saveWorkout(obj)
 
             workoutStruct = struct( ...
-                'Name', workName, ...
-                'Latitude', lat(:).', ...
-                'Longitude', lon(:).', ...
-                'Speed', speed(:).', ...
-                'Elevation', elevation(:).', ...
-                'TimeStamp', t(:).' ...
+                'Latitude',  obj.Latitude, ...
+                'Longitude', obj.Longitude, ...
+                'TimeStamp', obj.TimeStamp, ...
+                'Speed',     obj.Speed, ...
+                'Elevation', obj.Elevation, ...
+                'Stats', struct( ...
+                    'TotalTime', obj.TotalTime, ...
+                    'AVGSpeed',  obj.AVGSpeed, ...
+                    'STDSpeed',  obj.STDSpeed, ...
+                    'ElevationGainLoss', obj.ElevationGainLoss) ...
             );
 
-            % Append new workout
-            obj.WorkoutNames(end+1) = workName;
+            % Store
+            
+            obj.WorkoutNames(end+1) = obj.DateAndTime;
             obj.WorkoutData(end+1)  = workoutStruct;
 
-            % Save permanently
+            % Save to file
             WorkNames = obj.WorkoutNames;
             WorkData  = obj.WorkoutData;
-            save(obj.SaveFile, "WorkNames", "WorkData");
+            save(obj.SaveFile,"WorkNames","WorkData");
         end
 
-        function workout = loadWorkout(obj, workoutName)
+
+
+        function loadWorkout(obj, workoutName)
+
+            % 1. Find which workout
             idx = find(obj.WorkoutNames == workoutName, 1);
             if isempty(idx)
-                workout = [];
-            else
-                workout = obj.WorkoutData(idx);
+                warning("Workout not found.");
+                return;
             end
+
+            % 2. Fetch stored struct
+            W = obj.WorkoutData(idx);
+
+            % 3. Restore raw data into object
+            obj.Latitude  = W.Latitude;
+            obj.Longitude = W.Longitude;
+            obj.TimeStamp = W.TimeStamp;
+            obj.Speed     = W.Speed;
+            obj.Elevation = W.Elevation;
+
+            % Restore stats
+            obj.TotalTime          = W.Stats.TotalTime;
+            obj.AVGSpeed           = W.Stats.AVGSpeed;
+            obj.STDSpeed           = W.Stats.STDSpeed;
+            obj.ElevationGainLoss  = W.Stats.ElevationGainLoss;
+
+            % 4. Update plots (only if they exist)
+            if ~isempty(obj.SpeedPlot) && isvalid(obj.SpeedPlot)
+                obj.SpeedPlot.XData = obj.TimeStamp;
+                obj.SpeedPlot.YData = obj.Speed;
+            end
+
+            if ~isempty(obj.ElevationPlot) && isvalid(obj.ElevationPlot)
+                obj.ElevationPlot.XData = obj.TimeStamp;
+                obj.ElevationPlot.YData = obj.Elevation;
+            end
+
+            % 5. Update geo map
+            if ~isempty(obj.GeoMapPlot) && isvalid(obj.GeoMapPlot)
+                obj.GeoMapPlot.LatitudeData  = obj.Latitude;
+                obj.GeoMapPlot.LongitudeData = obj.Longitude;
+
+                latMin = min(obj.Latitude); latMax = max(obj.Latitude);
+                lonMin = min(obj.Longitude); lonMax = max(obj.Longitude);
+                geolimits(obj.Axes, [latMin latMax], [lonMin lonMax]);
+            end
+
+            % 6. Update stats table
+            if ~isempty(obj.StatsTable)
+                obj.StatsTable.Data = {
+                    obj.TotalTime;
+                    obj.AVGSpeed;
+                    obj.STDSpeed;
+                    obj.ElevationGainLoss;
+                };
+            end
+
+            fprintf("Workout '%s' loaded.\n", workoutName);
+
         end
 
     end
