@@ -7,17 +7,6 @@ classdef fitnessSensors < handle
         Speed;
         Elevation;
 
-        lat;
-        StoreLat;
-        lon;
-        StoreLon;
-        Tstamp;
-        StoreTime;
-        spd;
-        StoreSpd;
-        alt;
-        StoreAlt;
-
         Axes;
         GeoMapPlot;
         
@@ -44,15 +33,9 @@ classdef fitnessSensors < handle
             'Speed', {}, ...
             'Elevation', {}, ...
             'Stats', {} );  % Struct array for each workout
-
         WorkoutFile = "workoutHistory.mat"  % Where permanent data is stored
-        
-        
-        AchievementData = struct( ...
-            'FastestRun', [], ...
-            'LongestDistance', [], ...
-            'HighestElevationGain', [], ...
-            'LongestDuration', []);
+
+        AchievementFile = 'AllAchievements.mat'
 
         IsWorkoutActive logical = false;
         IsPaused logical = false;
@@ -233,20 +216,20 @@ classdef fitnessSensors < handle
                 return;
             end
             
-            [obj.lat, obj.lon, obj.Tstamp, obj.spd, ~, obj.alt, ~] = ...
+            [lat, lon, timestamp, speed, ~, alt, ~] = ...
                 poslog(obj.mobileDevConnection);
 
-            if isempty(obj.lat)
+            if isempty(lat)
                 return;
             end
 
-            obj.TimeStamp = obj.Tstamp(:).';
-            obj.Speed = obj.spd(:).';
-            obj.Elevation = obj.alt(:).';
+            obj.TimeStamp = timestamp(:).';
+            obj.Speed = speed(:).';
+            obj.Elevation = alt(:).';
 
             % append to route
-            obj.Latitude = obj.lat(:).';
-            obj.Longitude = obj.lon(:).';
+            obj.Latitude = lat(:).';
+            obj.Longitude = lon(:).';
 
             % update line data
             if ~isempty(obj.GeoMapPlot) && isvalid(obj.GeoMapPlot)
@@ -254,12 +237,12 @@ classdef fitnessSensors < handle
                 obj.GeoMapPlot.LongitudeData = obj.Longitude;
             end
 
-            if ~isempty(obj.spd)
+            if ~isempty(speed)
                 obj.SpeedPlot.XData = obj.TimeStamp;
                 obj.SpeedPlot.YData = obj.Speed;
             end
 
-            if ~isempty(obj.alt)
+            if ~isempty(alt)
                 obj.ElevationPlot.XData = obj.TimeStamp;
                 obj.ElevationPlot.YData = obj.Elevation;
             end
@@ -461,46 +444,86 @@ classdef fitnessSensors < handle
 
         end
 
+        function d = haversineDistance(~, lat1, lon1, lat2, lon2)
+            R = 6371000; % Earth's radius in meters
+            lat1 = deg2rad(lat1);
+            lon1 = deg2rad(lon1);
+            lat2 = deg2rad(lat2);
+            lon2 = deg2rad(lon2);
+
+            dlat = lat2 - lat1;
+            dlon = lon2 - lon1;
+
+            a = sin(dlat/2).^2 + cos(lat1).*cos(lat2).*sin(dlon/2).^2;
+            c = 2 * atan2(sqrt(a), sqrt(1 - a));
+
+            d = R * c; % distance in meters
+        end
+
+
         function achievements = getAchievements(obj)
 
-            if isfile(obj.WorkoutFile)
-                F = load(obj.WorkoutFile);
-                if isfield(F,"Achievements")
-                    obj.AchievementData = F.AchData;
-                else
-                    obj.AchievementData = struct( ...
-                    'FastestRun', {}, ...
-                    'LongestDistance', {}, ...
-                    'HighestElevationGain', {}, ...
-                    'LongestDuration', {});
-                end
-
-
-            end
-
-            [maxSpeed, idxSpeed] = max([obj.WorkoutData.MaxSpeed]);
-            fastestRun = struct('Name', obj.WorkoutData(idxSpeed).Name, ...
-                'Speed', maxSpeed, 'Date', obj.WorkoutData(idxSpeed).Date);
-
-      
-            [maxDist, idxDist] = max([obj.WorkoutData.TotalDistance]);
-            longestDistance = struct('Name', obj.WorkoutData(idxDist).Name, ...
-                'Distance', maxDist, 'Date', obj.WorkoutData(idxDist).Date);
-
-            [maxGain, idxGain] = max([obj.WorkoutData.ElevationGain]);
-            highestGain = struct('Name', obj.WorkoutData(idxGain).Name, ...
-                'Gain', maxGain, 'Date', obj.WorkoutData(idxGain).Date);
-
-           
-            [maxDur, idxDur] = max([obj.WorkoutData.Duration]);
-            longestDuration = struct('Name', obj.WorkoutData(idxDur).Name, ...
-                'Duration', maxDur, 'Date', obj.WorkoutData(idxDur).Date);
-
-            achievements = struct('FastestRun', fastestRun, ...
+            fastestRun = struct('Date', [], 'Speed', []);
+            longestDistance = struct('Date', [], 'Distance', []);
+            highestGain = struct('Date', [], 'Gain', []);
+            longestDuration = struct('Date', [], 'Duration', []);
+            
+            achievements = struct( ...
+                'FastestRun', fastestRun, ...
                 'LongestDistance', longestDistance, ...
                 'HighestElevationGain', highestGain, ...
                 'LongestDuration', longestDuration);
-        end
 
+            for i = 1:numel(obj.WorkoutNames)
+                W = obj.WorkoutData(i);
+
+                maxSpeed = max(W.Speed, [], "omitnan");
+
+                lat = W.Latitude;
+                lon = W.Longitude;
+                
+                totalDist = 0;
+                if numel(lat) >= 1
+                    for k = 1:numel(lat)-1
+                        totalDist = totalDist + obj.haversineDistance(...
+                            lat(k), lon(k), lat(k+1), lon(k+1) );
+                    end
+                end
+
+                elevGain = sum(diff(W.Elevation), "omitnan");
+
+                duration = W.TimeStamp(end);
+
+                if isempty(achievements.FastestRun.Speed) || maxSpeed > achievements.FastestRun.Speed
+                    fastestRun = struct('Date', obj.WorkoutNames(i), ...
+                        'Speed', maxSpeed);
+                end
+
+                % Longest Distance
+                if isempty(achievements.LongestDistance.Distance) || totalDist > achievements.LongestDistance.Distance
+                    longestDistance = struct('Date', obj.WorkoutNames(i), ...
+                        'Distance', totalDist);
+                end
+
+                % Highest Elevation Gain
+                if isempty(achievements.HighestElevationGain.Gain) || elevGain > achievements.HighestElevationGain.Gain
+                    highestGain = struct('Date', obj.WorkoutNames(i), ...
+                        'Gain', elevGain);
+                end
+
+                % Longest Duration
+                if isempty(achievements.LongestDuration.Duration) || duration > achievements.LongestDuration.Duration
+                    longestDuration = struct('Date', obj.WorkoutNames(i), ...
+                        'Duration', duration);
+                end
+            end
+
+            achievements = struct('FastestRun', fastestRun, ...
+                    'LongestDistance', longestDistance, ...
+                    'HighestElevationGain', highestGain, ...
+                    'LongestDuration', longestDuration);
+
+        end
+        
     end
 end
